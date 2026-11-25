@@ -14,10 +14,12 @@ export interface ImageAsset {
   height?: number;
 }
 
+/** Студия = тег WooCommerce, имя которого совпадает с термином атрибута «Студия» (pa_brand). */
 export interface Studio {
   id: number;
   slug: string;
   name: string;
+  count?: number;
 }
 
 export interface Category {
@@ -29,10 +31,16 @@ export interface Category {
   image?: ImageAsset;
 }
 
+export interface Tag {
+  id: number;
+  slug: string;
+  name: string;
+}
+
 export interface ColorOption {
   slug: string;
   name: string;
-  /** Для свотча; если неизвестен — показываем подпись */
+  /** CSS background для свотча; если неизвестен — показываем подпись */
   hex?: string;
 }
 
@@ -79,12 +87,67 @@ export interface ProductSummary {
 
 export interface Product extends ProductSummary {
   sku: string;
+  /** Полное название из WooCommerce, уже без HTML-сущностей */
+  fullName: string;
   descriptionHtml: string;
   shortDescriptionHtml: string;
   categories: Pick<Category, "id" | "slug" | "name">[];
-  tags: { id: number; slug: string; name: string }[];
+  tags: Tag[];
   variations: Variation[];
   gender: Gender | "unisex";
   averageRating: number;
   reviewCount: number;
+}
+
+/* ---------- Запрос каталога ---------- */
+
+export type SortKey = "popular" | "new" | "price-asc" | "price-desc";
+
+export interface CatalogQuery {
+  /** Слаг категории (включая подкатегории) */
+  category?: string;
+  /** Слаг тега: подборка, релиз или студия */
+  tag?: string;
+  gender?: Gender;
+  q?: string;
+  sizes: string[];
+  colors: string[];
+  studios: string[];
+  delivery: DeliveryType[];
+  priceMin?: number;
+  priceMax?: number;
+  /** По умолчанию true: распроданное скрыто */
+  inStockOnly: boolean;
+  sort: SortKey;
+  page: number;
+  perPage: number;
+}
+
+export interface FacetOption {
+  value: string;
+  label: string;
+  count: number;
+}
+
+export interface CatalogFacets {
+  categories: FacetOption[];
+  sizes: FacetOption[];
+  colors: (FacetOption & { hex?: string })[];
+  studios: FacetOption[];
+  delivery: FacetOption[];
+  price: { min: number; max: number };
+}
+
+export interface ProductList {
+  items: ProductSummary[];
+  total: number;
+  page: number;
+  pageCount: number;
+  facets: CatalogFacets;
+}
+
+export interface SearchSuggestions {
+  products: ProductSummary[];
+  categories: Category[];
+  studios: Studio[];
 }
