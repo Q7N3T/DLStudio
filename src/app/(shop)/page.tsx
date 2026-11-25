@@ -8,7 +8,7 @@ export default function HomePage() {
       <p className="text-xs font-bold tracking-widest text-foreground-muted uppercase">
         Новая витрина · в разработке
       </p>
-      <h1 className="mt-3 max-w-4xl font-display text-display font-bold break-words uppercase">
+      <h1 className="mt-3 max-w-6xl font-display text-display font-bold text-balance uppercase">
         Индивидуальность интереснее, чем тренды
       </h1>
       <p className="mt-5 max-w-xl text-foreground-muted">

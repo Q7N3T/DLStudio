@@ -137,8 +137,10 @@
   --text-2xl--line-height: 2.125rem;
   --text-3xl: 2.25rem;
   --text-3xl--line-height: 2.5rem;
-  --text-display: clamp(1.375rem, 6.4vw, 4.5rem);
-  --text-display--line-height: 1;
+  /* Широкий акцидентный шрифт: размер привязан к ширине экрана так, чтобы самое длинное
+     слово («ИНДИВИДУАЛЬНОСТЬ», ~14.6em в Unbounded Bold) помещалось целиком без разрыва. */
+  --text-display: clamp(1.125rem, calc((100vw - 2rem) / 15.5), 4.5rem);
+  --text-display--line-height: 1.12;
 
   --radius-sm: calc(var(--radius) * 0.5);
   --radius-md: var(--radius);
