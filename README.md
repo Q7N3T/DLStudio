@@ -1,83 +1,128 @@
-# DL Studio — витрина
+# DL Studio
 
-Headless-фронтенд для [dlstudio.store](https://dlstudio.store) поверх WordPress + WooCommerce (Store API).
-Next.js 16 (App Router, Cache Components), TypeScript strict, Tailwind CSS 4, shadcn/ui (Radix), Zustand.
+Интернет-магазин бренда одежды **DL Studio** ([dlstudio.store](https://dlstudio.store)): одежда, обувь и аксессуары
+независимых китайских студий напрямую от производителей. Портфолио-проект: headless-коммерция на
+**Medusa v2** и витрина на **Next.js**.
 
-## Запуск
+> Предыдущая версия — headless-витрина поверх WooCommerce Store API — сохранена в ветке и теге
+> [`woo-headless`](https://github.com/Q7N3T/DLStudio/tree/woo-headless). Её дизайн-система и компоненты
+> переносятся в эту витрину на этапе 3.
+
+## Архитектура
+
+```
+  браузер ──▶ :8000  storefront (Next.js)  ── JS SDK ──▶  backend (Medusa v2) :9000
+                                                            ├─ Store API   /store/*
+  админ   ──▶ :9000/app ───────────────────────────────────▶├─ Admin API   /admin/*
+                                                            └─ Admin (React)
+                                     postgres:17 ◀──────────┤  данные
+                                     redis:7     ◀──────────┘  события, workflow, блокировки
+```
+
+| Каталог | Что внутри |
+| --- | --- |
+| [`backend/`](backend) | Medusa v2: конфиг, сиды, скрипты; дальше — модули ЮKassa, доставки, Telegram и импорт CSV |
+| [`storefront/`](storefront) | Next.js на базе официального Medusa Next.js Starter |
+| [`deploy/`](deploy) | Dockerfile и скрипты запуска для разработки; продакшен-compose, nginx и HTTPS — на этапе 7 |
+| [`docker-compose.yml`](docker-compose.yml) | Локальное окружение: postgres, redis, backend, storefront |
+
+Монорепо на npm workspaces + [Turborepo](https://turbo.build). Стек: Node 22.22+ (в образах — Node 24),
+TypeScript, PostgreSQL 17, Redis 7, Tailwind CSS.
+
+## Быстрый старт (Docker)
+
+Нужны Docker с Compose v2 (на macOS подойдёт [Colima](https://github.com/abiosoft/colima)).
 
 ```bash
+cp .env.example .env      # необязательно: без .env используются dev-значения по умолчанию
+docker compose up --build
+```
+
+Первый запуск занимает несколько минут: ставятся зависимости, выполняются миграции и начальный сид.
+
+| Что | Адрес |
+| --- | --- |
+| Витрина | http://localhost:8000 |
+| API | http://localhost:9000 (`/health` — проверка) |
+| Админка | http://localhost:9000/app — `admin@dlstudio.local` / `supersecret` (меняется в `.env`) |
+
+Что происходит при запуске:
+
+1. `deps` ставит зависимости в Docker-тома (под Linux, отдельно от `node_modules` на хосте) — повторно только при изменении `package-lock.json`.
+2. `backend` ждёт Postgres, выполняет `medusa db:migrate` (при первом запуске — начальный сид), создаёт пользователя админки, записывает публичный API-ключ в общий том и запускает `medusa develop`.
+3. `storefront` берёт публичный ключ из общего тома, ждёт API и запускает `next dev`. Витрина работает в сетевом пространстве бэкенда, поэтому `http://localhost:9000` одинаково доступен браузеру и серверному коду Next.js.
+
+Полезные команды:
+
+```bash
+docker compose logs -f backend          # логи бэкенда
+docker compose exec backend sh          # шелл в контейнере бэкенда
+docker compose down                     # остановить (данные сохраняются)
+docker compose down -v                  # остановить и удалить базу, Redis и зависимости
+```
+
+### Если Docker не скачивает образы (Colima)
+
+Ошибка вида `lookup registry-1.docker.io on [::1]:53: connection refused` означает, что в виртуальной машине
+Colima не работает DNS. Лечится так:
+
+```bash
+colima ssh -- sh -c 'sudo rm -f /etc/resolv.conf && printf "nameserver 8.8.8.8\nnameserver 1.1.1.1\n" | sudo tee /etc/resolv.conf && sudo systemctl restart docker'
+```
+
+## Запуск приложений без Docker
+
+Postgres и Redis всё равно удобнее держать в Docker:
+
+```bash
+docker compose up -d postgres redis
 npm install
-cp .env.example .env.local   # по умолчанию CATALOG_PROVIDER=mock
-npm run dev                  # http://localhost:3000
+
+cp backend/.env.template backend/.env
+(cd backend && npx medusa db:migrate && npx medusa user -e admin@dlstudio.local -p supersecret)
+(cd backend && npx medusa exec ./src/scripts/write-publishable-key.ts)   # → storefront/.publishable-key
+
+cp storefront/.env.template storefront/.env.local   # вставьте ключ из storefront/.publishable-key
+npm run dev                                         # backend :9000 + storefront :8000
 ```
 
-| Скрипт                            | Что делает                               |
-| --------------------------------- | ---------------------------------------- |
-| `npm run dev`                     | dev-сервер                               |
-| `npm run build` / `start`         | прод-сборка и запуск                     |
-| `npm run lint` / `typecheck`      | ESLint, `tsc --noEmit`                   |
-| `npm run format` / `format:check` | Prettier (+ сортировка классов Tailwind) |
-| `npm test`                        | Vitest (логика)                          |
-| `npm run test:e2e`                | Playwright (критический путь)            |
+## Переменные окружения
 
-Витрина компонентов во всех состояниях: [`/ui`](http://localhost:3000/ui) (закрыта от индексации).
+Все секреты — только через `.env` (в git не попадает). Описание каждой переменной:
 
-## Данные каталога
+- [`.env.example`](.env.example) — для `docker compose` (Postgres, секреты Medusa, CORS, админ, регион витрины);
+- [`backend/.env.template`](backend/.env.template) — бэкенд без Docker;
+- [`storefront/.env.template`](storefront/.env.template) — витрина без Docker.
 
-Витрина получает данные только через интерфейс `CatalogProvider` ([src/lib/catalog/provider.ts](src/lib/catalog/provider.ts)),
-реализация выбирается переменной `CATALOG_PROVIDER`:
+| Переменная | Где | Назначение |
+| --- | --- | --- |
+| `DATABASE_URL` | backend | Postgres. В Docker — с `?sslmode=disable`: иначе Medusa включает SSL для адресов не на localhost и подключение зависает |
+| `REDIS_URL` | backend | Redis для событий, workflow и блокировок; без него — in-memory (только один процесс) |
+| `JWT_SECRET`, `COOKIE_SECRET` | backend | Секреты сессий; в продакшене — `openssl rand -hex 32` |
+| `STORE_CORS`, `ADMIN_CORS`, `AUTH_CORS` | backend | Разрешённые источники |
+| `MEDUSA_ADMIN_EMAIL`, `MEDUSA_ADMIN_PASSWORD` | compose | Пользователь админки, создаётся при первом запуске |
+| `NEXT_PUBLIC_MEDUSA_BACKEND_URL` | storefront | Адрес API Medusa |
+| `NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY` | storefront | Публичный ключ `pk_…`; в Docker подставляется автоматически |
+| `NEXT_PUBLIC_DEFAULT_REGION` | storefront | Страна по умолчанию (на этапе 2 — `ru`) |
+| `NEXT_PUBLIC_BASE_URL` | storefront | Публичный адрес витрины для canonical, sitemap, OpenGraph |
 
-- `mock` (по умолчанию) — `MockProvider` на JSON-фикстурах по схеме Store API в `src/mocks/store-api/`.
-  42 товара: оба склада, распроданное, вариации цвет × размер, скидки, диапазоны цен. Пересоздать: `npm run mocks`.
-- `woo` — `WooProvider` поверх Store API (этап 5).
+## Этапы
 
-Сырые ответы приводятся к доменной модели в [mapping.ts](src/lib/catalog/mapping.ts) одинаково для обоих провайдеров.
-Правила, согласованные с владельцем и вытекающие из данных сайта:
+- [x] **1. Скелет монорепо и docker-compose для разработки**
+- [ ] 2. Medusa: регион RU, рубли, русский язык, склады, сиды с тестовыми товарами
+- [ ] 3. Витрина: главная, каталог, карточка товара, корзина, оформление, гостевой заказ, личный кабинет
+- [ ] 4. Платёжный провайдер ЮKassa (webhook, тестовый режим)
+- [ ] 5. Уведомления о заказах в Telegram
+- [ ] 6. Импорт товаров из CSV
+- [ ] 7. Продакшен: nginx + HTTPS (Let's Encrypt), production docker-compose
+- [ ] 8. GitHub Actions: линт, проверка типов, сборка, деплой на VPS
 
-- «Из России» — товар в категории `warehouse-in-russia`, остальные — «Из Китая».
-- Студия — тег, чьё имя совпадает с термином атрибута «Студия» (`pa_brand`); слаги у них местами расходятся.
-- Размер доступен, если у товара есть такая вариация и товар в наличии (Store API не отдаёт остатки вариаций в списке).
-- Бейдж NEW — у N самых новых товаров (`NEW_PRODUCTS_COUNT` в [config/catalog.ts](src/config/catalog.ts)).
-- Названия приходят с HTML-сущностями (`&#171;`) — декодируются; «Тип «Студия Название»» разбирается на части.
+## Разработка
 
-Фильтры хранятся в URL: `?size=M,L&color=black&studio=dazo-studio&delivery=russia&price=5000-15000&stock=all&sort=new&page=2&q=…`
-([query.ts](src/lib/catalog/query.ts)).
+- Правила для агентов и подсказки по Medusa — [AGENTS.md](AGENTS.md).
+- Бэкенд проверяется `@medusajs/eslint-plugin` (`npm run lint`); правила `@medusajs/*` не отключаем — чиним код.
+- Тесты бэкенда: `cd backend && npm run test:unit` (интеграционные требуют живую базу).
 
-## Деплой
+## Лицензия
 
-```bash
-npm run deploy
-```
-
-Скрипт [`scripts/deploy.sh`](scripts/deploy.sh): проверки (типы, линтер, тесты) → `rsync` на сервер → `npm ci` и сборка
-на сервере → `pm2 restart` → проверка, что сайт отвечает 200. Если сборка упала, старая версия продолжает работать.
-По умолчанию хост `nl` из `~/.ssh/config`, папка `/var/www/site`, процесс pm2 `dlstudio`; меняется переменными
-`DEPLOY_HOST`, `DEPLOY_PATH`, `DEPLOY_APP`, `DEPLOY_PORT`. Пропустить проверки: `SKIP_CHECKS=1 npm run deploy`.
-
-На сервере: Node.js 24, pm2 (автозапуск через systemd), nginx проксирует домен на `127.0.0.1:3000`.
-
-## Структура
-
-```
-src/
-  app/(shop)/        витрина: шапка, футер, таб-бар
-  app/(dev)/ui/      витрина компонентов
-  components/ui/     примитивы shadcn/ui (сгенерированы, правятся точечно)
-  components/shop/   компоненты магазина: карточка, цена, бейджи, размеры, фильтры…
-  components/layout/ шапка, таб-бар, футер
-  config/            сроки доставки, навигация, подборки, таблица размеров
-  lib/               форматирование цен/дат, доменные типы каталога
-  stores/            Zustand: корзина, избранное, настройки (persist в localStorage)
-```
-
-## Дизайн-токены
-
-Все значения — CSS-переменные в `src/app/globals.css`, отображённые в тему Tailwind через `@theme inline`.
-Акцент `#F26B3A` даёт 2,9:1 на фоне и не проходит WCAG AA, поэтому используется только как декор;
-для текста и бейджей — `--brand-strong` `#CE410E` (4,6:1).
-
-## Ограничения
-
-- Запросы на запись (корзина, заказы) в рабочий WooCommerce — только после явного подтверждения владельца
-  (`WOO_ALLOW_WRITES=false`).
-- Изображения в моках — нейтральные заглушки из `public/placeholders`.
+Код на базе [Medusa DTC Starter](https://github.com/medusajs/medusa) (MIT, см. [LICENSE](LICENSE)).
