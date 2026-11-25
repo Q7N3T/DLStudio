@@ -10,6 +10,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
+import { defaultQuery, getCatalog } from "@/lib/catalog";
 import { formatDeliveryWindow } from "@/lib/format";
 import {
   ColorDemo,
@@ -77,7 +78,11 @@ function Section({
   );
 }
 
-export default function UiShowcasePage() {
+export default async function UiShowcasePage() {
+  const catalog = getCatalog();
+  const fromMocks = await catalog.listProducts(
+    defaultQuery({ inStockOnly: false, sort: "new", perPage: 8 }),
+  );
   return (
     <div className="container-page py-8">
       <h1 className="text-3xl font-bold">Витрина компонентов</h1>
@@ -93,6 +98,7 @@ export default function UiShowcasePage() {
             ["badges", "Бейджи и цены"],
             ["variants", "Размеры и цвета"],
             ["cards", "Карточки"],
+            ["mocks", "Из каталога"],
             ["filters", "Фильтры"],
             ["states", "Состояния"],
             ["misc", "Прочее"],
@@ -231,6 +237,18 @@ export default function UiShowcasePage() {
             <p className="mb-2 text-2xs font-semibold text-foreground-muted uppercase">Skeleton</p>
             <ProductCardSkeleton />
           </div>
+        </ProductGrid>
+      </Section>
+
+      <Section id="mocks" title={`Карточки из каталога · провайдер «${catalog.name}»`}>
+        <p className="mb-6 max-w-2xl text-sm text-foreground-muted">
+          Данные проходят полный путь: JSON по схеме Store API → маппинг → карточка. Всего товаров:{" "}
+          {fromMocks.total}, сортировка «новинки», распроданное в конце.
+        </p>
+        <ProductGrid>
+          {fromMocks.items.map((product, i) => (
+            <ProductCard key={product.id} product={product} priority={i < 2} />
+          ))}
         </ProductGrid>
       </Section>
 

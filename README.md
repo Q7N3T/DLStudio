@@ -22,6 +22,27 @@ npm run dev                  # http://localhost:3000
 
 Витрина компонентов во всех состояниях: [`/ui`](http://localhost:3000/ui) (закрыта от индексации).
 
+## Данные каталога
+
+Витрина получает данные только через интерфейс `CatalogProvider` ([src/lib/catalog/provider.ts](src/lib/catalog/provider.ts)),
+реализация выбирается переменной `CATALOG_PROVIDER`:
+
+- `mock` (по умолчанию) — `MockProvider` на JSON-фикстурах по схеме Store API в `src/mocks/store-api/`.
+  42 товара: оба склада, распроданное, вариации цвет × размер, скидки, диапазоны цен. Пересоздать: `npm run mocks`.
+- `woo` — `WooProvider` поверх Store API (этап 5).
+
+Сырые ответы приводятся к доменной модели в [mapping.ts](src/lib/catalog/mapping.ts) одинаково для обоих провайдеров.
+Правила, согласованные с владельцем и вытекающие из данных сайта:
+
+- «Из России» — товар в категории `warehouse-in-russia`, остальные — «Из Китая».
+- Студия — тег, чьё имя совпадает с термином атрибута «Студия» (`pa_brand`); слаги у них местами расходятся.
+- Размер доступен, если у товара есть такая вариация и товар в наличии (Store API не отдаёт остатки вариаций в списке).
+- Бейдж NEW — у N самых новых товаров (`NEW_PRODUCTS_COUNT` в [config/catalog.ts](src/config/catalog.ts)).
+- Названия приходят с HTML-сущностями (`&#171;`) — декодируются; «Тип «Студия Название»» разбирается на части.
+
+Фильтры хранятся в URL: `?size=M,L&color=black&studio=dazo-studio&delivery=russia&price=5000-15000&stock=all&sort=new&page=2&q=…`
+([query.ts](src/lib/catalog/query.ts)).
+
 ## Деплой
 
 ```bash

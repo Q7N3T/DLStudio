@@ -13,7 +13,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "deploy": "bash scripts/deploy.sh"
+    "deploy": "bash scripts/deploy.sh",
+    "mocks": "node scripts/generate-mocks.mjs"
   },
   "dependencies": {
     "class-variance-authority": "^0.7.1",
