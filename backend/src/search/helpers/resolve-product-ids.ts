@@ -135,6 +135,15 @@ export async function resolveProductIds(
       );
     case "sales-channel":
       return productIdsInSalesChannels(query, ids);
+    case "inventory-level":
+      return relatedProductIds(
+        query,
+        "inventory_level",
+        ["inventory_item.variants.product_id"],
+        ids,
+        (row) => (row.inventory_item?.variants ?? []).map((variant: any) => variant?.product_id),
+        deleted,
+      );
     default:
       return [];
   }

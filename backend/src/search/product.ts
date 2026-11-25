@@ -20,7 +20,17 @@ const PRODUCT_GRAPH_FIELDS = [
   "created_at",
   "sales_channels.id",
   "categories.name",
+  "categories.handle",
+  "categories.mpath",
   "tags.value",
+  "metadata",
+  "studio.handle",
+  "studio.name",
+  "collection.handle",
+  "variants.manage_inventory",
+  "variants.allow_backorder",
+  "variants.inventory_items.inventory.location_levels.stocked_quantity",
+  "variants.inventory_items.inventory.location_levels.reserved_quantity",
   "options.title",
   "options.values.value",
 ];
@@ -35,10 +45,53 @@ type ProductRow = {
   created_at?: string | Date | null;
   deleted_at?: string | Date | null;
   sales_channels?: ({ id?: string | null } | null)[] | null;
-  categories?: ({ name?: string | null } | null)[] | null;
+  categories?: ({ name?: string | null; handle?: string | null; mpath?: string | null } | null)[] | null;
+  metadata?: Record<string, unknown> | null;
+  studio?: { handle?: string | null; name?: string | null } | null;
+  collection?: { handle?: string | null } | null;
+  variants?: VariantStockRow[] | null;
   tags?: ({ value?: string | null } | null)[] | null;
   options?: ProductOptionRow[] | null;
 };
+
+type VariantStockRow = {
+  manage_inventory?: boolean | null;
+  allow_backorder?: boolean | null;
+  inventory_items?: ({
+    inventory?: {
+      location_levels?: ({ stocked_quantity?: number | null; reserved_quantity?: number | null } | null)[] | null;
+    } | null;
+  } | null)[] | null;
+} | null;
+
+/** Хотя бы один вариант можно купить: без учёта остатков, под заказ или есть свободный остаток */
+export function isProductInStock(variants: VariantStockRow[] | null | undefined): boolean {
+  return (variants ?? []).some((v) => {
+    if (!v) return false;
+    if (v.manage_inventory === false || v.allow_backorder) return true;
+    return (v.inventory_items ?? []).some((item) =>
+      (item?.inventory?.location_levels ?? []).some(
+        (level) => (level?.stocked_quantity ?? 0) - (level?.reserved_quantity ?? 0) > 0,
+      ),
+    );
+  });
+}
+
+/** handle категории и всех её предков (mpath — цепочка id от корня) */
+export function categoryHandlesWithAncestors(
+  categories: ProductRow["categories"],
+  handleById: Map<string, string>,
+): string[] {
+  const handles = new Set<string>();
+  for (const category of categories ?? []) {
+    if (category?.handle) handles.add(category.handle);
+    for (const id of (category?.mpath ?? "").split(".")) {
+      const handle = handleById.get(id);
+      if (handle) handles.add(handle);
+    }
+  }
+  return [...handles];
+}
 
 const productFields = search.define({
   id: search.keyword().filterable().retrievable(),
@@ -52,6 +105,12 @@ const productFields = search.define({
   thumbnail: search.keyword().retrievable(),
   created_at: search.date().sortable().retrievable(),
   category: search.keyword().array().filterable().facetable().retrievable(),
+  // DL Studio: каталог фильтрует по разделу (с подкатегориями), студии, складу и наличию
+  category_handles: search.keyword().array().filterable().facetable().retrievable(),
+  studio: search.keyword().filterable().facetable().retrievable(),
+  collection: search.keyword().filterable().facetable().retrievable(),
+  delivery_origin: search.keyword().filterable().facetable().retrievable(),
+  in_stock: search.boolean().filterable().facetable().sortable().retrievable(),
   labels: search.keyword().array().filterable().facetable().retrievable(),
   option_values: search
     .keyword()
@@ -70,6 +129,7 @@ type ProductDocument = SearchTypes.InferSearchDocumentType<
 function toDocument(
   product: ProductRow,
   pricing: Parameters<typeof toProductPricing>[0],
+  categoryHandleById: Map<string, string>,
 ): ProductDocument {
   const category = (product.categories ?? [])
     .map((productCategory) => productCategory?.name?.trim())
@@ -93,6 +153,11 @@ function toDocument(
     category,
     labels,
     option_values: toOptionValues(product.options),
+    category_handles: categoryHandlesWithAncestors(product.categories, categoryHandleById),
+    studio: product.studio?.handle ?? null,
+    collection: product.collection?.handle ?? null,
+    delivery_origin: product.metadata?.delivery_origin === "russia" ? "russia" : "china",
+    in_stock: isProductInStock(product.variants),
     ...toProductPricing(pricing),
   };
 }
@@ -112,8 +177,16 @@ const source = {
       rows.map((row) => row.id),
       context,
     );
+    // Предки категорий: mpath хранит id, переводим их в handle одним запросом
+    const { data: allCategories } = await context.container.query.graph({
+      entity: "product_category",
+      fields: ["id", "handle"],
+    });
+    const categoryHandleById = new Map(
+      (allCategories as { id: string; handle: string }[]).map((c) => [c.id, c.handle]),
+    );
 
-    return rows.map((row) => toDocument(row, pricing.get(row.id)));
+    return rows.map((row) => toDocument(row, pricing.get(row.id), categoryHandleById));
   },
 };
 
@@ -145,6 +218,10 @@ const PRODUCT_EVENTS = [
   "product-category.updated",
   "product-category.deleted",
   "sales-channel.deleted",
+  // Наличие: остатки меняются при заказе, поступлении и правке в админке
+  "inventory-level.created",
+  "inventory-level.updated",
+  "inventory-level.deleted",
 ];
 
 export default defineSearchIndex({

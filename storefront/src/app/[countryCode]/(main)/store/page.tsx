@@ -1,23 +1,25 @@
 import { Metadata } from "next"
-import { notFound } from "next/navigation"
-
-import { getRegion } from "@lib/data/regions"
-import StoreTemplate from "@modules/store/templates"
+import { CatalogView } from "@modules/dl/catalog/catalog-view"
 
 export const metadata: Metadata = {
-  title: "Store",
-  description: "Explore all of our products.",
+  title: "Каталог",
+  description: "Одежда, обувь и аксессуары независимых студий из Китая — с фильтрами по размеру, цене, студии и сроку доставки.",
 }
 
-export default async function StorePage(props: {
+type Props = {
   params: Promise<{ countryCode: string }>
-}) {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}
+
+export default async function StorePage(props: Props) {
   const { countryCode } = await props.params
-  const region = await getRegion(countryCode)
-
-  if (!region) {
-    notFound()
-  }
-
-  return <StoreTemplate currencyCode={region.currency_code} />
+  return (
+    <CatalogView
+      countryCode={countryCode}
+      basePath={`/${countryCode}/store`}
+      title="Каталог"
+      scope={{}}
+      searchParams={await props.searchParams}
+    />
+  )
 }
