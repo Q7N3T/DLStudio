@@ -22,6 +22,19 @@ npm run dev                  # http://localhost:3000
 
 Витрина компонентов во всех состояниях: [`/ui`](http://localhost:3000/ui) (закрыта от индексации).
 
+## Деплой
+
+```bash
+npm run deploy
+```
+
+Скрипт [`scripts/deploy.sh`](scripts/deploy.sh): проверки (типы, линтер, тесты) → `rsync` на сервер → `npm ci` и сборка
+на сервере → `pm2 restart` → проверка, что сайт отвечает 200. Если сборка упала, старая версия продолжает работать.
+По умолчанию хост `nl` из `~/.ssh/config`, папка `/var/www/site`, процесс pm2 `dlstudio`; меняется переменными
+`DEPLOY_HOST`, `DEPLOY_PATH`, `DEPLOY_APP`, `DEPLOY_PORT`. Пропустить проверки: `SKIP_CHECKS=1 npm run deploy`.
+
+На сервере: Node.js 24, pm2 (автозапуск через systemd), nginx проксирует домен на `127.0.0.1:3000`.
+
 ## Структура
 
 ```
