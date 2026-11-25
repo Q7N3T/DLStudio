@@ -1,30 +1,58 @@
 import { retrieveCart } from "@lib/data/cart"
-import { retrieveCustomer } from "@lib/data/customer"
-import PaymentWrapper from "@modules/checkout/components/payment-wrapper"
-import CheckoutForm from "@modules/checkout/templates/checkout-form"
-import CheckoutSummary from "@modules/checkout/templates/checkout-summary"
+import { calculatePriceForShippingOption, listCartShippingMethods } from "@lib/data/fulfillment"
+import { listCartPaymentMethods } from "@lib/data/payment"
+import { CART_FIELDS } from "@lib/dl/cart"
+import { CheckoutView, type CarrierOption } from "@modules/dl/checkout/checkout-view"
 import { Metadata } from "next"
-import { notFound } from "next/navigation"
+import { redirect } from "next/navigation"
 
 export const metadata: Metadata = {
-  title: "Checkout",
+  title: "Оформление заказа",
+  robots: { index: false, follow: false },
 }
 
-export default async function Checkout() {
-  const cart = await retrieveCart()
+/** Сроки и подписи перевозчиков — те же, что в тарифах backend (dlstudio-shipping) */
+const CARRIER_INFO: Record<string, { description: string; days: string; order: number }> = {
+  cdek: { description: "До пункта выдачи СДЭК", days: "3–7 дней", order: 0 },
+  "russian-post": { description: "До отделения Почты России", days: "7–14 дней", order: 1 },
+}
+const carrierOrder = (code: string) => CARRIER_INFO[code]?.order ?? 99
 
-  if (!cart) {
-    return notFound()
-  }
+export default async function CheckoutPage(props: { params: Promise<{ countryCode: string }> }) {
+  const { countryCode } = await props.params
+  const cart = await retrieveCart(undefined, CART_FIELDS)
+  if (!cart || !cart.items?.length) redirect(`/${countryCode}/cart`)
 
-  const customer = await retrieveCustomer()
+  const [shippingOptions, paymentProviders] = await Promise.all([
+    listCartShippingMethods(cart.id),
+    cart.region_id ? listCartPaymentMethods(cart.region_id) : Promise.resolve([]),
+  ])
+
+  // Цена «calculated» зависит от корзины (бесплатно от порога) — считаем на сервере для каждого варианта
+  const carriers: CarrierOption[] = await Promise.all(
+    (shippingOptions ?? []).map(async (o) => {
+      const code = String((o.data as Record<string, unknown> | null)?.carrier ?? o.type?.code ?? o.id)
+      let amount: number | null = o.amount ?? null
+      if (o.price_type === "calculated") {
+        const calc = await calculatePriceForShippingOption(o.id, cart.id)
+        amount = calc?.amount ?? null
+      }
+      return {
+        id: o.id,
+        code,
+        name: o.name,
+        description: CARRIER_INFO[code]?.description ?? o.type?.description ?? "",
+        days: CARRIER_INFO[code]?.days ?? "",
+        amount,
+      }
+    })
+  )
 
   return (
-    <div className="grid grid-cols-1 small:grid-cols-[1fr_416px] content-container gap-x-40 py-12">
-      <PaymentWrapper cart={cart}>
-        <CheckoutForm cart={cart} customer={customer} />
-      </PaymentWrapper>
-      <CheckoutSummary cart={cart} />
-    </div>
+    <CheckoutView
+      cart={cart}
+      carriers={carriers.filter((c) => c.amount !== null).sort((a, b) => carrierOrder(a.code) - carrierOrder(b.code))}
+      paymentProviders={(paymentProviders ?? []).map((p) => p.id)}
+    />
   )
 }
