@@ -1,0 +1,129 @@
+# Локальная разработка: docker compose up
+#
+#   Витрина    http://localhost:8000
+#   API        http://localhost:9000
+#   Админка    http://localhost:9000/app   (логин/пароль — MEDUSA_ADMIN_* из .env)
+#
+# Значения по умолчанию подходят для разработки; переопределяются в .env (см. .env.example).
+# Продакшен-конфигурация — deploy/docker-compose.prod.yml (этап 7).
+
+name: dlstudio
+
+x-node-dev: &node-dev
+  build:
+    context: .
+    dockerfile: deploy/docker/dev.Dockerfile
+  image: dlstudio-dev:latest
+  volumes:
+    - .:/app
+    # Зависимости под Linux — в томах, чтобы не конфликтовать с node_modules на macOS
+    - node_modules:/app/node_modules
+    - backend_node_modules:/app/backend/node_modules
+    - storefront_node_modules:/app/storefront/node_modules
+    - shared:/shared
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-medusa}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-medusa}
+      POSTGRES_DB: ${POSTGRES_DB:-medusa}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  # Однократная установка зависимостей в Linux-тома (повторно — только при изменении lock-файла)
+  deps:
+    <<: *node-dev
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        HASH=$$(sha256sum package-lock.json | cut -d' ' -f1)
+        if [ "$$(cat node_modules/.lock-hash 2>/dev/null)" != "$$HASH" ]; then
+          echo "▸ npm ci"; npm ci && echo "$$HASH" > node_modules/.lock-hash
+        else
+          echo "▸ Зависимости актуальны"
+        fi
+
+  backend:
+    <<: *node-dev
+    restart: unless-stopped
+    command: ["sh", "deploy/docker/backend-dev.sh"]
+    depends_on:
+      deps: { condition: service_completed_successfully }
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    environment:
+      NODE_ENV: development
+      # sslmode=disable обязателен: для адресов не на localhost Medusa по умолчанию включает SSL,
+      # а dev-Postgres в Docker работает без него — подключение зависает до таймаута.
+      DATABASE_URL: postgres://${POSTGRES_USER:-medusa}:${POSTGRES_PASSWORD:-medusa}@postgres:5432/${POSTGRES_DB:-medusa}?sslmode=disable
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret}
+      COOKIE_SECRET: ${COOKIE_SECRET:-dev-cookie-secret}
+      STORE_CORS: ${STORE_CORS:-http://localhost:8000}
+      ADMIN_CORS: ${ADMIN_CORS:-http://localhost:9000,http://localhost:5173}
+      AUTH_CORS: ${AUTH_CORS:-http://localhost:8000,http://localhost:9000,http://localhost:5173}
+      MEDUSA_ADMIN_EMAIL: ${MEDUSA_ADMIN_EMAIL:-admin@dlstudio.local}
+      MEDUSA_ADMIN_PASSWORD: ${MEDUSA_ADMIN_PASSWORD:-supersecret}
+      PUBLISHABLE_KEY_FILE: /shared/publishable-key
+    ports:
+      - "9000:9000"
+      # Витрина работает в сетевом пространстве бэкенда (см. storefront.network_mode)
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:9000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 60
+      start_period: 60s
+
+  storefront:
+    <<: *node-dev
+    restart: unless-stopped
+    command: ["sh", "deploy/docker/storefront-dev.sh"]
+    # Общая сеть с бэкендом: http://localhost:9000 одинаково работает и в браузере,
+    # и в серверном коде Next.js (в стартере это одна переменная NEXT_PUBLIC_MEDUSA_BACKEND_URL).
+    network_mode: service:backend
+    depends_on:
+      deps: { condition: service_completed_successfully }
+      backend: { condition: service_started }
+    environment:
+      NODE_ENV: development
+      NEXT_PUBLIC_MEDUSA_BACKEND_URL: http://localhost:9000
+      NEXT_PUBLIC_BASE_URL: http://localhost:8000
+      NEXT_PUBLIC_DEFAULT_REGION: ${NEXT_PUBLIC_DEFAULT_REGION:-dk}
+      NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY: ${NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY:-}
+      PUBLISHABLE_KEY_FILE: /shared/publishable-key
+
+volumes:
+  pgdata:
+  redisdata:
+  shared:
+  node_modules:
+  backend_node_modules:
+  storefront_node_modules:
