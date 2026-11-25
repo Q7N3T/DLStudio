@@ -135,6 +135,21 @@ docker compose down && docker volume rm dlstudio_pgdata dlstudio_redisdata && do
 
 Язык админки выбирается у каждого пользователя: **Settings → Profile → Language → Русский**.
 
+### Colima: горячая перезагрузка
+
+По умолчанию Colima не пробрасывает в виртуальную машину события изменения файлов — Next.js и Medusa
+в контейнерах не видят правок. Включите `mountInotify` и перезапустите Colima:
+
+```bash
+sed -i '' 's/^mountInotify: false/mountInotify: true/' ~/.colima/default/colima.yaml && colima restart
+```
+
+### VPN и картинки в dev
+
+VPN с fake-IP DNS (Clash, sing-box и т.п.) резолвит dlstudio.store в `198.18.x`, а Next 16 по умолчанию не
+оптимизирует картинки с таких адресов. Поэтому в `docker-compose.yml` для витрины задано
+`NEXT_IMAGE_ALLOW_LOCAL_IP=true` — только для разработки; в продакшене защита остаётся включённой.
+
 ## Запуск приложений без Docker
 
 Postgres и Redis всё равно удобнее держать в Docker:
