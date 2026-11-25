@@ -4,7 +4,7 @@
 FROM node:24-bookworm-slim
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends curl ca-certificates postgresql-client \
+  && apt-get install -y --no-install-recommends curl ca-certificates postgresql-client socat \
   && rm -rf /var/lib/apt/lists/*
 
 ENV NEXT_TELEMETRY_DISABLED=1 \

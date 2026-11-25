@@ -70,6 +70,71 @@ Colima не работает DNS. Лечится так:
 colima ssh -- sh -c 'sudo rm -f /etc/resolv.conf && printf "nameserver 8.8.8.8\nnameserver 1.1.1.1\n" | sudo tee /etc/resolv.conf && sudo systemctl restart docker'
 ```
 
+## Данные магазина (сид)
+
+При первом `medusa db:migrate` на пустой базе выполняется [`initial-data-seed`](backend/src/migration-scripts/initial-data-seed.ts)
+(логика — [`backend/src/lib/seed/`](backend/src/lib/seed)):
+
+| Что | Значение |
+| --- | --- |
+| Магазин | «DL Studio», валюта ₽ по умолчанию, цены с учётом налогов |
+| Регион | «Россия» (`ru`, RUB), политики доставки и возврата в метаданных региона |
+| Склады | «Склад в Москве» (товары «Из России», остались единичные размеры) и «Склад в Китае (Гуанчжоу)» (под заказ) |
+| Доставка | СДЭК 490 ₽ (3–7 дней) и Почта России 390 ₽ (7–14 дней), бесплатно от 15 000 ₽ |
+| Каталог | Снимок dlstudio.store: 72 реальных товара, 50 категорий (слаги сайта), 18 студий, 5 коллекций, релизы — тегами |
+| Остатки | Китай — 50 шт. на вариацию (под заказ); Москва — 1 шт. оставшихся размеров; распроданные — 0 |
+| Цены | Цены с сайта; прайс-лист «Распродажа» для товаров со скидкой; промокод **AUTUMN** — −10% на заказ |
+
+### Снимок каталога
+
+Товары берутся из [`backend/src/lib/seed/data/dlstudio-snapshot.json`](backend/src/lib/seed/data/dlstudio-snapshot.json).
+Его делает [`tools/snapshot-dlstudio.mjs`](tools/snapshot-dlstudio.mjs) — только чтение публичного WooCommerce Store API,
+без ключей и без записи:
+
+```bash
+node tools/snapshot-dlstudio.mjs            # 72 товара: оба склада, все разделы, скидки, распроданное
+node tools/snapshot-dlstudio.mjs --limit 120
+```
+
+Что сохраняется по каждому товару: название, тип, студия, категории, подборки и релизы, цены и скидка,
+цвета и размеры (по существующим вариациям), фото (ссылки на dlstudio.store) и **нижняя часть карточки**,
+разобранная из HTML описания по блокам. В Medusa она лежит в `product.metadata.details`:
+
+| Поле | Что внутри | Пример |
+| --- | --- | --- |
+| `season` | сезон коллекции | «Коллекция осень-зима 2025» |
+| `size_chart` | таблица замеров: `columns` и `rows` | Грудь / Плечи / Рукав / Длина по размерам; у обуви — EU / US / см |
+| `size_chart_note` | подсказка к таблице | «Выбирайте исходя из цифр, а не из букв…» |
+| `model_params` | параметры моделей на фото | «Парень – 175 см / 60 кг. Верх М, низ M.» |
+| `composition` | состав, по строке на часть | «Верх: натуральная кожа.», «Подошва: резина + EVA» |
+| `care` | уход | «Машинная стирка при 30°С…» |
+| `temperature` | температурный режим верхней одежды | «ориентировочно от +10 до 0 °C» |
+| `features` | прочие характеристики | `{ label: "Высота каблука", value: "2 см" }` |
+
+Обычный текст описания — в `product.description`. Тип доставки — в `product.metadata.delivery_origin`
+(`china` / `russia`), он совпадает со складом, где лежит остаток. Handle товара = слаг на сайте,
+поэтому адреса `/product/<slug>/` сохраняются.
+
+Пересоздать данные с нуля:
+
+```bash
+docker compose down && docker volume rm dlstudio_pgdata dlstudio_redisdata && docker compose up -d
+```
+
+### Свои модули бэкенда
+
+- **Студии** — [`backend/src/modules/studio`](backend/src/modules/studio): модель `studio` (название, handle, описание,
+  логотип, обложка) и связь «много товаров → одна студия» ([`links/product-studio.ts`](backend/src/links/product-studio.ts)).
+  В запросах доступно как `product.studio` и `studio.products`.
+- **Доставка СДЭК / Почта России** — [`backend/src/modules/dlstudio-shipping`](backend/src/modules/dlstudio-shipping):
+  провайдер-заглушка (`dlstudio-shipping_stub`) с фиксированными тарифами из [`tariffs.ts`](backend/src/modules/dlstudio-shipping/tariffs.ts).
+  Цена считается провайдером, поэтому порог бесплатной доставки (`FREE_SHIPPING_THRESHOLD`) учитывается при каждом
+  пересчёте корзины. Для реального API достаточно заменить `calculatePrice` и `createFulfillment`.
+
+### Админка на русском
+
+Язык админки выбирается у каждого пользователя: **Settings → Profile → Language → Русский**.
+
 ## Запуск приложений без Docker
 
 Postgres и Redis всё равно удобнее держать в Docker:
@@ -103,13 +168,15 @@ npm run dev                                         # backend :9000 + storefront
 | `MEDUSA_ADMIN_EMAIL`, `MEDUSA_ADMIN_PASSWORD` | compose | Пользователь админки, создаётся при первом запуске |
 | `NEXT_PUBLIC_MEDUSA_BACKEND_URL` | storefront | Адрес API Medusa |
 | `NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY` | storefront | Публичный ключ `pk_…`; в Docker подставляется автоматически |
-| `NEXT_PUBLIC_DEFAULT_REGION` | storefront | Страна по умолчанию (на этапе 2 — `ru`) |
+| `FREE_SHIPPING_THRESHOLD` | backend | Бесплатная доставка от этой суммы, ₽ (по умолчанию 15000; 0 — без порога) |
+| `MEDUSA_BACKEND_URL` | backend | Публичный адрес API (ссылки админки) |
+| `NEXT_PUBLIC_DEFAULT_REGION` | storefront | Страна по умолчанию (`ru`) |
 | `NEXT_PUBLIC_BASE_URL` | storefront | Публичный адрес витрины для canonical, sitemap, OpenGraph |
 
 ## Этапы
 
 - [x] **1. Скелет монорепо и docker-compose для разработки**
-- [ ] 2. Medusa: регион RU, рубли, русский язык, склады, сиды с тестовыми товарами
+- [x] **2. Medusa: регион RU, рубли, склады, доставка-заглушка, студии, сиды с тестовыми товарами**
 - [ ] 3. Витрина: главная, каталог, карточка товара, корзина, оформление, гостевой заказ, личный кабинет
 - [ ] 4. Платёжный провайдер ЮKassa (webhook, тестовый режим)
 - [ ] 5. Уведомления о заказах в Telegram

@@ -22,3 +22,18 @@ export const DEFAULT_REGION_STORE_POLICIES: RegionStorePolicies = {
   transit_days_min: 2,
   transit_days_max: 3,
 };
+
+/**
+ * Политики региона «Россия» (страницы «Доставка» и «Возврат», структурированные данные).
+ * Возврат: 14 дней — черновое значение, уточняется у владельца.
+ * Сроки — для товаров со склада в Москве; товары из Китая едут дольше (см. витрину).
+ */
+export const RU_REGION_STORE_POLICIES: RegionStorePolicies = {
+  return_window_days: 14,
+  free_returns: false,
+  shipping_rate: 490,
+  handling_days_min: 1,
+  handling_days_max: 2,
+  transit_days_min: 3,
+  transit_days_max: 7,
+};

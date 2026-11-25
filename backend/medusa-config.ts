@@ -52,5 +52,26 @@ module.exports = defineConfig({
     disable: process.env.DISABLE_MEDUSA_ADMIN === "true",
     backendUrl: process.env.MEDUSA_BACKEND_URL,
   },
-  modules: redisModules,
+  modules: [
+    ...redisModules,
+    // Студии (бренды) — свой модуль, связан с товарами (src/links/product-studio.ts)
+    { resolve: "./src/modules/studio" },
+    {
+      resolve: "@medusajs/medusa/fulfillment",
+      options: {
+        providers: [
+          // Ручная доставка оставлена для самовывоза и служебных отправлений
+          { resolve: "@medusajs/medusa/fulfillment-manual", id: "manual" },
+          // СДЭК / Почта России: заглушка с фиксированными тарифами → provider_id "dlstudio-shipping_stub"
+          {
+            resolve: "./src/modules/dlstudio-shipping",
+            id: "stub",
+            options: {
+              free_shipping_threshold: Number(process.env.FREE_SHIPPING_THRESHOLD ?? 15000),
+            },
+          },
+        ],
+      },
+    },
+  ],
 })

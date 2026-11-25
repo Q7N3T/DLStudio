@@ -5,6 +5,10 @@
 set -eu
 cd /app/backend
 
+KEY_FILE="${PUBLISHABLE_KEY_FILE:-/shared/publishable-key}"
+# Старый ключ мог остаться в томе после сброса базы — удаляем, чтобы витрина дождалась нового
+rm -f "$KEY_FILE"
+
 echo "▸ Жду PostgreSQL…"
 until pg_isready -d "$DATABASE_URL" -q; do sleep 1; done
 
@@ -19,7 +23,7 @@ if [ -n "${MEDUSA_ADMIN_EMAIL:-}" ] && [ -n "${MEDUSA_ADMIN_PASSWORD:-}" ]; then
 fi
 
 echo "▸ Публичный API-ключ для витрины"
-npx medusa exec ./src/scripts/write-publishable-key.ts "${PUBLISHABLE_KEY_FILE:-/shared/publishable-key}"
+npx medusa exec ./src/scripts/write-publishable-key.ts "$KEY_FILE"
 
 echo "▸ medusa develop на :9000 (админка: http://localhost:9000/app)"
 exec npx medusa develop
