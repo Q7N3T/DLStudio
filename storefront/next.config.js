@@ -49,8 +49,17 @@ const nextConfig = {
     ignoreBuildErrors: true,
   },
   images: {
-    unoptimized: true,
+    // Фото товаров на dlstudio.store — 1200px; оптимизатор отдаёт телефону уменьшенные AVIF/WebP
+    formats: ["image/avif", "image/webp"],
+    // Next 16 не оптимизирует картинки с локальных/служебных IP. VPN с fake-IP DNS (198.18.x)
+    // на машине разработчика выглядит именно так — разрешаем только в dev (docker-compose.yml).
+    dangerouslyAllowLocalIP: process.env.NEXT_IMAGE_ALLOW_LOCAL_IP === "true",
     remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "dlstudio.store",
+        pathname: "/wp-content/uploads/**",
+      },
       {
         protocol: "http",
         hostname: "localhost",

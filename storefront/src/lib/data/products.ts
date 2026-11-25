@@ -1,6 +1,7 @@
 "use server"
 
 import { sdk } from "@lib/config"
+import { PRODUCT_FIELDS } from "@lib/dl/product"
 import { OptionValueIds } from "@lib/util/product-option-filters"
 import { sortProducts } from "@lib/util/sort-products"
 import { HttpTypes } from "@medusajs/types"
@@ -69,8 +70,7 @@ export const listProducts = async ({
           limit,
           offset,
           region_id: region?.id,
-          fields:
-            "*variants.calculated_price,+variants.inventory_quantity,*variants.images,*variants.options,+metadata,+tags,",
+          fields: PRODUCT_FIELDS,
           ...queryParams,
         },
         headers,

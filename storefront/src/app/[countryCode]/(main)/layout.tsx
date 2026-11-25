@@ -1,45 +1,32 @@
 import { Metadata } from "next"
 
-import { listCartOptions, retrieveCart } from "@lib/data/cart"
+import { retrieveCart } from "@lib/data/cart"
 import { retrieveCustomer } from "@lib/data/customer"
 import { getBaseURL } from "@lib/util/env"
-import { StoreCartShippingOption } from "@medusajs/types"
 import CartMismatchBanner from "@modules/layout/components/cart-mismatch-banner"
-import Footer from "@modules/layout/templates/footer"
-import Nav from "@modules/layout/templates/nav"
-import FreeShippingPriceNudge from "@modules/shipping/components/free-shipping-price-nudge"
+import { SiteFooter } from "@modules/dl/layout/site-footer"
+import { SiteHeader } from "@modules/dl/layout/site-header"
+import { TabBar } from "@modules/dl/layout/tab-bar"
 
 export const metadata: Metadata = {
   metadataBase: new URL(getBaseURL()),
 }
 
-export default async function PageLayout(props: { children: React.ReactNode }) {
-  const customer = await retrieveCustomer()
-  const cart = await retrieveCart()
-  let shippingOptions: StoreCartShippingOption[] = []
-
-  if (cart) {
-    const { shipping_options } = await listCartOptions()
-
-    shippingOptions = shipping_options
-  }
+export default async function PageLayout(props: {
+  children: React.ReactNode
+  params: Promise<{ countryCode: string }>
+}) {
+  const { countryCode } = await props.params
+  const [customer, cart] = await Promise.all([retrieveCustomer(), retrieveCart()])
+  const cartCount = (cart?.items ?? []).reduce((n, i) => n + (i.quantity ?? 0), 0)
 
   return (
     <>
-      <Nav />
-      {customer && cart && (
-        <CartMismatchBanner customer={customer} cart={cart} />
-      )}
-
-      {cart && (
-        <FreeShippingPriceNudge
-          variant="popup"
-          cart={cart}
-          shippingOptions={shippingOptions}
-        />
-      )}
-      {props.children}
-      <Footer />
+      <SiteHeader countryCode={countryCode} cartCount={cartCount} />
+      {customer && cart && <CartMismatchBanner customer={customer} cart={cart} />}
+      <div id="main">{props.children}</div>
+      <SiteFooter countryCode={countryCode} />
+      <TabBar cartCount={cartCount} />
     </>
   )
 }

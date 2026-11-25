@@ -79,6 +79,8 @@ services:
       redis: { condition: service_healthy }
     environment:
       NODE_ENV: development
+      # Отслеживание файлов через общую папку Colima/Docker Desktop не видит новых файлов — опрашиваем
+      CHOKIDAR_USEPOLLING: "true"
       # sslmode=disable обязателен: для адресов не на localhost Medusa по умолчанию включает SSL,
       # а dev-Postgres в Docker работает без него — подключение зависает до таймаута.
       DATABASE_URL: postgres://${POSTGRES_USER:-medusa}:${POSTGRES_PASSWORD:-medusa}@postgres:5432/${POSTGRES_DB:-medusa}?sslmode=disable
@@ -113,6 +115,10 @@ services:
       backend: { condition: service_started }
     environment:
       NODE_ENV: development
+      WATCHPACK_POLLING: "true"
+      # Только для разработки: VPN с fake-IP DNS резолвит dlstudio.store в 198.18.x,
+      # а Next 16 по умолчанию не оптимизирует картинки с таких адресов
+      NEXT_IMAGE_ALLOW_LOCAL_IP: "true"
       NEXT_PUBLIC_MEDUSA_BACKEND_URL: http://localhost:9000
       NEXT_PUBLIC_BASE_URL: http://localhost:8000
       NEXT_PUBLIC_DEFAULT_REGION: ${NEXT_PUBLIC_DEFAULT_REGION:-ru}

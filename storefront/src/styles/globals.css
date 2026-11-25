@@ -2,6 +2,60 @@
 @import "tailwindcss/components";
 @import "tailwindcss/utilities";
 
+/*
+ * Дизайн-токены DL Studio (перенесены из woo-headless).
+ * Акцент #F26B3A даёт 2.9:1 на фоне — только декор; текст и бейджи — --dl-brand-strong (4.6:1, WCAG AA).
+ */
+:root {
+  --dl-bg: #fafaf8;
+  --dl-surface: #ffffff;
+  --dl-surface-muted: #f1f1ee;
+  --dl-fg: #1a1a1a;
+  --dl-fg-muted: #6b6b6b;
+  --dl-border: #e6e6e3;
+  --dl-border-strong: #cfcfcb;
+  --dl-brand: #f26b3a;
+  --dl-brand-strong: #ce410e;
+  --dl-brand-soft: #fdeee8;
+  --dl-success: #2f6b4f;
+  --dl-success-soft: #e8f0ec;
+  --dl-danger: #b42318;
+  --dl-danger-soft: #fdecea;
+  --dl-soldout: #8a8a8a;
+  --dl-tabbar-h: 3.5rem;
+}
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+    text-size-adjust: 100%;
+  }
+  body {
+    background: var(--dl-bg);
+    color: var(--dl-fg);
+    font-family: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  :focus-visible {
+    outline: 2px solid var(--dl-fg);
+    outline-offset: 2px;
+  }
+  ::selection {
+    background: var(--dl-brand-soft);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 @layer utilities {
   /* Chrome, Safari and Opera */
   .no-scrollbar::-webkit-scrollbar {
@@ -109,4 +163,11 @@
   .text-3xl-semi {
     @apply text-[32px] leading-[44px] font-semibold;
   }
+}
+
+/* Подсказка «выберите размер»: короткое встряхивание группы чипсов */
+@keyframes dl-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
 }

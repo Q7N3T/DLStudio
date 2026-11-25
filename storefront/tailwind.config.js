@@ -20,6 +20,24 @@ module.exports = {
         padding: "padding-top padding-right padding-bottom padding-left",
       },
       colors: {
+        // Токены DL Studio (src/styles/globals.css). Префикс dl- не пересекается с пресетом Medusa.
+        dl: {
+          bg: "var(--dl-bg)",
+          surface: "var(--dl-surface)",
+          muted: "var(--dl-surface-muted)",
+          fg: "var(--dl-fg)",
+          "fg-muted": "var(--dl-fg-muted)",
+          border: "var(--dl-border)",
+          "border-strong": "var(--dl-border-strong)",
+          brand: "var(--dl-brand)",
+          "brand-strong": "var(--dl-brand-strong)",
+          "brand-soft": "var(--dl-brand-soft)",
+          success: "var(--dl-success)",
+          "success-soft": "var(--dl-success-soft)",
+          danger: "var(--dl-danger)",
+          "danger-soft": "var(--dl-danger-soft)",
+          soldout: "var(--dl-soldout)",
+        },
         grey: {
           0: "#FFFFFF",
           5: "#F9FAFB",
@@ -45,6 +63,19 @@ module.exports = {
       maxWidth: {
         "8xl": "100rem",
       },
+      boxShadow: {
+        "dl-sm": "0 1px 2px rgb(26 26 26 / 0.06)",
+        "dl-md": "0 4px 16px rgb(26 26 26 / 0.08)",
+        "dl-lg": "0 12px 40px rgb(26 26 26 / 0.12)",
+        "dl-up": "0 -4px 16px rgb(26 26 26 / 0.08)",
+      },
+      transitionTimingFunction: {
+        dl: "cubic-bezier(0.2, 0, 0, 1)",
+      },
+      spacing: {
+        "tabbar": "var(--dl-tabbar-h)",
+        "safe-b": "env(safe-area-inset-bottom)",
+      },
       screens: {
         "2xsmall": "320px",
         xsmall: "512px",
@@ -58,7 +89,10 @@ module.exports = {
         "3xl": "2rem",
       },
       fontFamily: {
+        // DL Studio: Manrope для интерфейса, Unbounded — только логотип и заголовки релизов
+        display: ["var(--font-unbounded)", "var(--font-manrope)", "sans-serif"],
         sans: [
+          "var(--font-manrope)",
           "Inter",
           "-apple-system",
           "BlinkMacSystemFont",

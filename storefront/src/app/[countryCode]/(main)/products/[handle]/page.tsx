@@ -43,20 +43,21 @@ export async function generateMetadata(props: Props): Promise<Metadata> {
   const description = product.description || product.title
 
   return {
-    title: `${product.title} | ${STORE_NAME}`,
+    // Шаблон в корневом layout добавит «— DL Studio»
+    title: product.title,
     description,
     alternates: {
       canonical: productUrl,
       languages: Object.fromEntries(
         listCountryCodes(regions).map((code) => [
-          `en-${code.toUpperCase()}`,
+          `ru-${code.toUpperCase()}`,
           `${origin}/${code}${path}`,
         ])
       ),
       types: { "text/markdown": `${productUrl}.md` },
     },
     openGraph: {
-      title: `${product.title} | ${STORE_NAME}`,
+      title: `${product.title} — ${STORE_NAME}`,
       description,
       url: productUrl,
       images: product.thumbnail ? [product.thumbnail] : [],
