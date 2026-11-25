@@ -93,8 +93,6 @@ services:
       PUBLISHABLE_KEY_FILE: /shared/publishable-key
     ports:
       - "9000:9000"
-      # Витрина работает в сетевом пространстве бэкенда (см. storefront.network_mode)
-      - "8000:8000"
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:9000/health"]
       interval: 10s
@@ -106,9 +104,10 @@ services:
     <<: *node-dev
     restart: unless-stopped
     command: ["sh", "deploy/docker/storefront-dev.sh"]
-    # Общая сеть с бэкендом: http://localhost:9000 одинаково работает и в браузере,
-    # и в серверном коде Next.js (в стартере это одна переменная NEXT_PUBLIC_MEDUSA_BACKEND_URL).
-    network_mode: service:backend
+    # http://localhost:9000 одинаково работает и в браузере, и в серверном коде Next.js:
+    # внутри контейнера socat проксирует localhost:9000 → backend:9000 (см. storefront-dev.sh).
+    ports:
+      - "8000:8000"
     depends_on:
       deps: { condition: service_completed_successfully }
       backend: { condition: service_started }
@@ -116,9 +115,10 @@ services:
       NODE_ENV: development
       NEXT_PUBLIC_MEDUSA_BACKEND_URL: http://localhost:9000
       NEXT_PUBLIC_BASE_URL: http://localhost:8000
-      NEXT_PUBLIC_DEFAULT_REGION: ${NEXT_PUBLIC_DEFAULT_REGION:-dk}
+      NEXT_PUBLIC_DEFAULT_REGION: ${NEXT_PUBLIC_DEFAULT_REGION:-ru}
       NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY: ${NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY:-}
       PUBLISHABLE_KEY_FILE: /shared/publishable-key
+      BACKEND_UPSTREAM: backend:9000
 
 volumes:
   pgdata:
